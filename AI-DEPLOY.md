@@ -159,14 +159,17 @@ Write-Host "✅ 防火牆 Port 4010 已開放" -ForegroundColor Green
 ### 🚀 步驟五：安裝 Task Scheduler（開機自動啟動）
 
 ```powershell
-# 確認 node.exe 路徑
+# 確認 node.exe 路徑（使用絕對路徑確保 SYSTEM 帳號也找得到）
 $nodePath = (Get-Command node).Source
 Write-Host "ℹ️  Node.js 路徑：$nodePath" -ForegroundColor Cyan
 
 # 移除舊 Task（若有）
 Unregister-ScheduledTask -TaskName "PlaybackAgent" -Confirm:$false -ErrorAction SilentlyContinue
 
-# 建立新 Task（SYSTEM 帳號，AtStartup，自動重試 3 次）
+# ⚠️ 說明：Agent 以 SYSTEM 帳號執行（Session 0）
+# Agent 本身是純 API 服務，不需要 GUI，SYSTEM 完全適合
+# 若播控程式本身有 GUI，需改用 WIN_USERNAME 帳號啟動播控程式
+# （Agent restart 指令是 spawn child process，子進程可用不同帳號）
 $action   = New-ScheduledTaskAction -Execute $nodePath `
               -Argument "C:\PlaybackAgent\windows-agent\dist\agent.js" `
               -WorkingDirectory "C:\PlaybackAgent\windows-agent"
@@ -175,7 +178,7 @@ $settings = New-ScheduledTaskSettingsSet `
               -StartWhenAvailable `
               -RestartCount 3 `
               -RestartInterval (New-TimeSpan -Minutes 1) `
-              -ExecutionTimeLimit (New-TimeSpan -Hours 0)  # 無時間限制
+              -ExecutionTimeLimit (New-TimeSpan -Hours 0)
 $principal = New-ScheduledTaskPrincipal -UserId "SYSTEM" -RunLevel Highest
 
 Register-ScheduledTask -TaskName "PlaybackAgent" `
@@ -185,6 +188,11 @@ Register-ScheduledTask -TaskName "PlaybackAgent" `
 $task = Get-ScheduledTask -TaskName "PlaybackAgent"
 Write-Host "✅ Task Scheduler 已建立（State: $($task.State)）" -ForegroundColor Green
 ```
+
+> **GUI 播控程式注意事項（Session 0 隔離）：**  
+> Agent 本身（node.exe）跑 SYSTEM 沒問題，是純背景服務。  
+> 但 Agent restart 時呼叫的播控程式如果有畫面（GUI），必須以登入的使用者帳號啟動才能顯示。  
+> 解法：在 `agent.config.json` 的 `processPath` 改成呼叫一個 wrapper `.bat`，wrapper 內用 `runas` 或 `Start-Process -Credential` 以使用者身份啟動 GUI 程式。
 
 ---
 

@@ -86,6 +86,14 @@ try {
     # 停用 Windows Hello 生物辨識服務
     Disable-ServiceSafe "WbioSrvc"
 
+    # Windows 11 額外開關："僅允許 Windows Hello 登入"
+    $signinPath = "HKLM:\SOFTWARE\Microsoft\PolicyManager\default\Settings\AllowSignInOptions"
+    if (Test-Path (Split-Path $signinPath)) {
+        Ensure-RegPath $signinPath
+        Set-ItemProperty -Path $signinPath -Name "value" -Value 0 -Type DWord
+        Write-OK "AllowSignInOptions.value = 0（Windows 11 Hello 僅登入選項關閉）"
+    }
+
     Write-WARN "PIN 設定需要重開機後生效；請先確認帳號已設定本機密碼（非 PIN）"
 } catch {
     Write-FAIL "Windows Hello 停用失敗：$($_.Exception.Message)"
