@@ -241,16 +241,39 @@ print('lastHeartbeat:', datetime.datetime.fromtimestamp(ts/1000).strftime('%H:%M
 
 ---
 
-### 🚀 步驟十：執行完整 Live 測試
+### 🚀 步驟十：由 Linux 主導執行完整部署驗證（含重開機）
 
-若 Linux 監控伺服器可執行 Python，在 Linux 上跑：
+**在 Linux 監控伺服器上執行**（需先完成 Windows Agent 部署）：
 
 ```bash
-cd /opt/playback-monitor   # 或 clone 位置
-python3 tests/live-system.test.py
+cd /opt/playback-monitor   # 或 linux-monitor clone 位置
+
+# 完整測試（含自動重開機 + 等待回線 + 回線後驗證）
+python3 tests/deploy-orchestration-test.py \
+  --monitor http://localhost:3100 \
+  --machine {MACHINE_ID} \
+  --agent   http://{WINDOWS_IP}:4010 \
+  --token   {SHARED_TOKEN}
+
+# 快速驗證模式（跳過重開機，只驗功能）
+python3 tests/deploy-orchestration-test.py \
+  --monitor http://localhost:3100 \
+  --machine {MACHINE_ID} \
+  --agent   http://{WINDOWS_IP}:4010 \
+  --token   {SHARED_TOKEN} \
+  --no-reboot
 ```
 
-預期：`12 通過 / 0 失敗`
+**Orchestration Test 7 個 Phase：**
+- P1：Pre-reboot 基礎驗證（Monitor + Agent + Heartbeat）
+- P2：App Crash → Auto Restart（重開機前）
+- P3：觸發遠端重開機（`/api/v1/admin/reboot`）
+- P4：等待主機斷線 → 回線（Ping 監控）
+- P5：Task Scheduler 自動啟動驗證（Agent 自動上線）
+- P6：重開機後完整功能驗證
+- P7：重開機後 App Crash → Auto Restart
+
+預期：所有 Phase 顯示 ✅，exit code 0
 
 ---
 
