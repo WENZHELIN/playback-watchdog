@@ -36,7 +36,7 @@ server.post('/api/v1/heartbeat', async (request, reply) => {
   const expectedToken = tokenMap.get(body.machineId);
   if (!expectedToken || token !== expectedToken) {
     log('warn', 'Heartbeat token mismatch', { machineId: body.machineId });
-    return reply.status(403).send({ error: 'Invalid token' });
+    return reply.status(401).send({ error: 'Unauthorized' });
   }
 
   const ok = stateManager.handleHeartbeat(body);
