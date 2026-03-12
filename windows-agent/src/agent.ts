@@ -109,6 +109,39 @@ server.post('/api/v1/admin/reboot', async (request, reply) => {
   }, 10_000);
 });
 
+// POST /api/v1/admin/kill-app  — 純殺 App（不觸發 agent 自動重啟），供混沌測試使用
+// Linux Monitor 偵測到 appRunning=false 後會主動發送 restart 指令
+server.post('/api/v1/admin/kill-app', async (request, reply) => {
+  if (!verifyToken(request.headers.authorization)) {
+    return reply.status(401).send({ error: 'Unauthorized' });
+  }
+
+  const body = request.body as { reason?: string } | undefined;
+  const running = await checkProcess(config);
+
+  if (!running) {
+    return reply.status(200).send({ status: 'not_running', message: 'App was already not running' });
+  }
+
+  log('warn', 'kill-app command received (chaos test)', {
+    machineId: config.machineId,
+    processName: config.processName,
+    reason: body?.reason ?? 'chaos-test',
+  });
+
+  // taskkill — 純殺，不重啟（讓 Linux monitor 偵測並主動發送 restart）
+  await new Promise<void>((resolve) => {
+    exec(`taskkill /F /IM ${config.processName}`, { timeout: 5000 }, () => resolve());
+  });
+
+  return reply.status(200).send({
+    status: 'killed',
+    machineId: config.machineId,
+    processName: config.processName,
+    message: 'App killed. Linux monitor will detect and restart.',
+  });
+});
+
 // GET /api/v1/admin/ping  — 輕量 liveness probe（無需 token，用於重開機後快速確認 agent 在線）
 server.get('/api/v1/admin/ping', async (_request, reply) => {
   return reply.status(200).send({ alive: true, machineId: config.machineId, uptime: Math.floor((Date.now() - startTime) / 1000) });
