@@ -23,7 +23,9 @@ export async function checkProcess(config: AgentConfig): Promise<boolean> {
         return;
       }
 
-      const lines = stdout.trim().split('\n').filter(line => line.includes(config.processName));
+      const lines = stdout.trim().split('\n').filter(line =>
+        line.toLowerCase().includes(config.processName.toLowerCase())
+      );
       if (lines.length === 0) {
         currentPid = null;
         resolve(false);
