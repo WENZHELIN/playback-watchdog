@@ -9,13 +9,14 @@
 
 1. [系統概覽](#系統概覽)
 2. [前置條件](#前置條件)
-3. [Linux 監控伺服器部署](#linux-監控伺服器部署)
-4. [Windows 播控主機部署](#windows-播控主機部署)
-5. [設定說明](#設定說明)
-6. [Windows 主機硬化](#windows-主機硬化)
-7. [驗證系統運作](#驗證系統運作)
-8. [API 參考](#api-參考)
-9. [常見問題](#常見問題)
+3. [🤖 Claude 自動部署（推薦）](#-claude-自動部署推薦)
+4. [Linux 監控伺服器部署](#linux-監控伺服器部署)
+5. [Windows 播控主機部署](#windows-播控主機部署)
+6. [設定說明](#設定說明)
+7. [Windows 主機硬化](#windows-主機硬化)
+8. [驗證系統運作](#驗證系統運作)
+9. [API 參考](#api-參考)
+10. [常見問題](#常見問題)
 
 ---
 
@@ -53,6 +54,25 @@
 | `recovering` | 已發送 restart，等待確認 | 輪詢 /status，30 秒 timeout |
 | `agent_down` | ping 通 + /status 失敗 | 僅警示，不重啟 |
 | `offline` | ping 失敗 | 僅記錄，不重啟 |
+
+---
+
+## 🤖 Claude 自動部署（推薦）
+
+**場域端 Windows 主機可以直接用 Claude 完成所有部署步驟，無需逐行手動執行。**
+
+### 使用方式
+
+1. 在 Windows 主機上開啟瀏覽器，前往 [claude.ai](https://claude.ai)
+2. 開啟 **[CLAUDE-DEPLOY.md](./CLAUDE-DEPLOY.md)**，複製全文貼入 Claude 對話
+3. Claude 會自動詢問必要資訊（伺服器 IP、Token 等）並依序執行 10 個部署步驟
+4. 完成後 Claude 會輸出清單，確認每項是否成功
+
+**CLAUDE-DEPLOY.md 涵蓋：**
+- 環境確認 → Clone/Build → 設定寫入 → 防火牆 → Task Scheduler → 啟動驗證 → 主機硬化 → Live 測試
+
+> 若場域已安裝 Claude Code CLI，也可以：  
+> `cat CLAUDE-DEPLOY.md | claude --print`
 
 ---
 
@@ -303,6 +323,14 @@ Invoke-WebRequest -Uri "http://localhost:4010/api/v1/status" -Headers $h | Selec
 
 腳本位於 `windows-agent/scripts/hardening/`。
 
+### 前置說明：PIN vs 密碼
+
+Windows AutoAdminLogon 需要**本機密碼**登入，不支援 PIN。部署前請確認：
+
+1. 帳號已設定本機密碼（非僅有 PIN）
+2. 若只有 PIN → 先到「設定 → 帳戶 → 登入選項」新增密碼
+3. 硬化腳本會停用 Windows Hello PIN，防止後續系統切回 PIN 認證
+
 ### 1. 先確認目前狀態
 
 ```powershell
@@ -315,18 +343,20 @@ exit code：`0` = 全部 OK，`1` = 有警告，`2` = 有問題需修正
 ### 2. 套用硬化設定
 
 ```powershell
-# 傳入登入帳號與密碼（用於 AutoAdminLogon）
 powershell -ExecutionPolicy Bypass -File init_workstation.ps1 -Username "YourUser" -Password "YourPassword"
 ```
 
-硬化內容：
-- **AutoAdminLogon**：開機自動登入（無需手動輸入密碼）
-- **防更新重開**：`NoAutoRebootWithLoggedOnUsers` + `NoAutoUpdate` Group Policy
-- **停用 Windows Update 服務**：`wuauserv` + `WaaSMedicSvc`
-- **防睡眠**：所有電源逾時設為 0，關閉休眠
-- **停用鎖定畫面**：`NoLockScreen` Policy
-- **Active Hours**：設為 08:00~23:00，防止系統自行安排重啟
-- **服務故障自恢復**：PlaybackAgent 故障後 5/10/30 秒自動重啟
+硬化內容（7 個區塊）：
+
+| 項目 | 說明 |
+|------|------|
+| **停用 Windows Hello PIN** | PassportForWork Enabled=0，AllowDomainPINLogon=0，停用 WbioSrvc |
+| **AutoAdminLogon** | 開機自動以密碼登入，無需手動輸入 |
+| **停用 Windows Update（多層）** | Group Policy + 封鎖 WU Server + 停用 4 個服務（wuauserv / WaaSMedicSvc / UsoSvc / DoSvc）|
+| **防止自動重開** | NoAutoRebootWithLoggedOnUsers + Active Hours 08:00~23:00 |
+| **防睡眠** | 所有電源逾時設為 0，關閉休眠 |
+| **停用鎖定畫面** | NoLockScreen Group Policy |
+| **服務故障自恢復** | PlaybackAgent 故障後 5s / 10s / 30s 依序自動重啟 |
 
 ### 3. 需要還原時
 
