@@ -1,0 +1,28 @@
+[
+  {
+    "machineId": "samoi-roy",
+    "displayName": "Playback A",
+    "hostIp": "192.168.1.158",
+    "agentBaseUrl": "http://192.168.1.158:4010",
+    "heartbeatTimeoutMs": 10000,
+    "pingIntervalMs": 3000,
+    "statusPollIntervalMs": 3000,
+    "recoveringTimeoutMs": 30000,
+    "maxRestartPer10Min": 3,
+    "restartCooldownMs": 60000,
+    "token": "dev-secret-samoi-roy"
+  },
+  {
+    "machineId": "samoi-4card",
+    "displayName": "Playback B",
+    "hostIp": "192.168.1.200",
+    "agentBaseUrl": "http://192.168.1.200:4010",
+    "heartbeatTimeoutMs": 10000,
+    "pingIntervalMs": 3000,
+    "statusPollIntervalMs": 3000,
+    "recoveringTimeoutMs": 30000,
+    "maxRestartPer10Min": 3,
+    "restartCooldownMs": 60000,
+    "token": "dev-secret-samoi-4card"
+  }
+]

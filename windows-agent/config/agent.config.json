@@ -1,0 +1,15 @@
+{
+  "machineId": "samoi-roy",
+  "displayName": "Playback A",
+  "listenHost": "0.0.0.0",
+  "listenPort": 4010,
+  "allowedServerIp": "192.168.1.84",
+  "sharedToken": "dev-secret-samoi-roy",
+  "processName": "notepad.exe",
+  "processPath": "C:\\Windows\\notepad.exe",
+  "workingDir": "C:\\",
+  "heartbeatTarget": "http://192.168.1.84:3000/api/v1/heartbeat",
+  "heartbeatIntervalMs": 5000,
+  "localCheckIntervalMs": 3000,
+  "restartCooldownMs": 30000
+}
