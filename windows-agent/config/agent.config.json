@@ -8,7 +8,7 @@
   "processName": "notepad.exe",
   "processPath": "C:\\Windows\\notepad.exe",
   "workingDir": "C:\\",
-  "heartbeatTarget": "http://192.168.1.84:3000/api/v1/heartbeat",
+  "heartbeatTarget": "http://192.168.1.84:3100/api/v1/heartbeat",
   "heartbeatIntervalMs": 5000,
   "localCheckIntervalMs": 3000,
   "restartCooldownMs": 30000

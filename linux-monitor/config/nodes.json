@@ -15,8 +15,8 @@
   {
     "machineId": "samoi-4card",
     "displayName": "Playback B",
-    "hostIp": "192.168.1.200",
-    "agentBaseUrl": "http://192.168.1.200:4010",
+    "hostIp": "192.168.1.235",
+    "agentBaseUrl": "http://192.168.1.235:4010",
     "heartbeatTimeoutMs": 10000,
     "pingIntervalMs": 3000,
     "statusPollIntervalMs": 3000,

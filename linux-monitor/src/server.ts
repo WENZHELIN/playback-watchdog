@@ -62,7 +62,7 @@ server.get<{ Params: { machineId: string } }>('/api/v1/nodes/:machineId', async 
   return reply.status(200).send(state);
 });
 
-const PORT = parseInt(process.env['PORT'] ?? '3000', 10);
+const PORT = parseInt(process.env['PORT'] ?? '3100', 10);
 const HOST = process.env['HOST'] ?? '0.0.0.0';
 
 async function start(): Promise<void> {

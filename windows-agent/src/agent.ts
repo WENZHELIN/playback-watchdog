@@ -1,5 +1,6 @@
 import Fastify from 'fastify';
 import * as fs from 'node:fs';
+import * as net from 'node:net';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { log } from './logger.js';
@@ -11,6 +12,21 @@ const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 const configPath = path.resolve(__dirname, '..', 'config', 'agent.config.json');
 const config: AgentConfig = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+
+// Singleton guard：若 port 已被佔用，代表另一個 instance 在跑，直接退出
+async function checkSingleton(port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const tester = net.createServer();
+    tester.once('error', () => resolve(false));   // port busy = not singleton
+    tester.once('listening', () => { tester.close(); resolve(true); });
+    tester.listen(port, '0.0.0.0');
+  });
+}
+const isSingleton = await checkSingleton(config.listenPort);
+if (!isSingleton) {
+  log('warn', 'Another agent instance already running, exiting.', { port: config.listenPort });
+  process.exit(0);
+}
 
 const startTime = Date.now();
 const server = Fastify({ logger: false });
