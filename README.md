@@ -1,167 +1,100 @@
 # Playback Watchdog System
 
-1 Linux Server + N Windows Playback Nodes watchdog with automatic health monitoring and restart.
+1 台 Linux 監控伺服器 + N 台 Windows 播控主機的全自動健康監控與重啟系統。
 
-## Architecture
+---
+
+## 快速導覽
+
+| 文件 | 內容 |
+|------|------|
+| **[DEPLOY.md](./DEPLOY.md)** | ✅ **完整部署手冊**（從零到上線，含 Windows 硬化） |
+| [DEV-SPEC.md](./DEV-SPEC.md) | 技術規格與架構設計 |
+
+---
+
+## 架構概覽
 
 ```
-+---------------------------+         +----------------------------+
-|    Linux Server (:3000)   |         |  Windows Playback A (:4010)|
-|    linux-monitor/         |         |  windows-agent/            |
-|                           |  ping   |                            |
-|  Ping Loop ---------------+-------->|                            |
-|  Status Poller -----------+--GET--->| GET /api/v1/status         |
-|  Restart Dispatcher ------+--POST-->| POST /api/v1/restart       |
-|                           |         |                            |
-|  POST /api/v1/heartbeat <-+--POST---| Heartbeat Sender (5s)      |
-|  GET  /api/v1/nodes       |         +----------------------------+
-|  GET  /api/v1/nodes/:id   |
-|                           |         +----------------------------+
-|                           |         |  Windows Playback B (:4010)|
-|  (same loops per node) ---+-------->|  windows-agent/            |
-+---------------------------+         +----------------------------+
+┌─────────────────────────────┐         ┌──────────────────────────────┐
+│  Linux 監控伺服器 :3100      │  ping   │  Windows 播控主機 A :4010    │
+│  linux-monitor              ├────────>│  windows-agent               │
+│                             ├─GET────>│  GET  /api/v1/status         │
+│                             ├─POST───>│  POST /api/v1/restart        │
+│  ◄──────────────────────────┤         │  heartbeat 每 5 秒           │
+│  POST /api/v1/heartbeat     │         └──────────────────────────────┘
+│  GET  /api/v1/nodes         │
+│  GET  /api/v1/nodes/:id     │         ┌──────────────────────────────┐
+└─────────────────────────────┘         │  Windows 播控主機 B :4010    │
+                                        └──────────────────────────────┘
 ```
 
-## Health States
+## 健康狀態
 
-| State | Condition | Action |
-|---|---|---|
-| `healthy` | ping ok + heartbeat <10s + appRunning=true | None |
-| `warning` | ping ok + /status ok + heartbeat incomplete | Log only |
-| `agent_down` | ping ok + /status fail + heartbeat fail | Alert only |
-| `degraded` | ping ok + (heartbeat timeout or appRunning=false) | Restart (with throttle) |
-| `offline` | ping fail | Log only, no restart |
-| `recovering` | restart dispatched, awaiting confirmation | Poll /status, 30s timeout |
+| 狀態 | 條件 | 動作 |
+|------|------|------|
+| `healthy` | ping + heartbeat + appRunning 全 OK | 無 |
+| `degraded` | heartbeat 超時 或 appRunning=false | **自動重啟** |
+| `recovering` | 已發出 restart，等待確認（30s timeout） | 輪詢確認 |
+| `agent_down` | ping 通但 /status 無回應 | 僅警示 |
+| `offline` | ping 失敗 | 僅記錄 |
 
-## Quick Start - Linux Server
+## 快速啟動
 
 ```bash
-# 1. Clone repository
+# Linux 伺服器
 git clone https://github.com/WENZHELIN/playback-watchdog.git
-cd playback-watchdog/linux-monitor
-
-# 2. Install dependencies
-npm install
-
-# 3. Edit config/nodes.json with your node IPs and tokens
-
-# 4. Build and start
-npm run build
-npm start
-
-# 5. (Optional) Install as systemd service
-chmod +x scripts/install-systemd.sh
-./scripts/install-systemd.sh
+cd playback-watchdog/linux-monitor && npm install && npm run build
+PORT=3100 npm start
 ```
 
-## Quick Start - Windows Agent
-
 ```powershell
-# 1. Copy windows-agent/ folder to C:\PlaybackAgent
-xcopy /E /I windows-agent C:\PlaybackAgent
-
-# 2. Install dependencies
-cd C:\PlaybackAgent
-npm install
-
-# 3. Edit config\agent.config.json with machineId, token, processPath
-
-# 4. Build and start
-npm run build
-npm start
-
-# 5. (Optional) Register as Task Scheduler task (run as Admin)
+# Windows 主機（以管理員執行）
+git clone https://github.com/WENZHELIN/playback-watchdog.git C:\PlaybackAgent
+cd C:\PlaybackAgent\windows-agent
+npm install && npm run build
+# 修改 config\agent.config.json 後：
 powershell -ExecutionPolicy Bypass -File scripts\install-task-scheduler.ps1
 ```
 
-## Configuration
+→ 完整說明請見 **[DEPLOY.md](./DEPLOY.md)**
 
-### Linux - config/nodes.json
-
-| Field | Type | Description |
-|---|---|---|
-| `machineId` | string | Unique node identifier |
-| `displayName` | string | Human-readable name |
-| `hostIp` | string | Windows machine IP |
-| `agentBaseUrl` | string | Agent URL (http://IP:4010) |
-| `heartbeatTimeoutMs` | number | Max time between heartbeats (default: 10000) |
-| `pingIntervalMs` | number | TCP ping interval (default: 3000) |
-| `statusPollIntervalMs` | number | GET /status interval (default: 3000) |
-| `recoveringTimeoutMs` | number | Max recovery wait time (default: 30000) |
-| `maxRestartPer10Min` | number | Restart throttle limit (default: 3) |
-| `restartCooldownMs` | number | Min time between restarts (default: 60000) |
-| `token` | string | Shared Bearer token for auth |
-
-### Windows - config/agent.config.json
-
-| Field | Type | Description |
-|---|---|---|
-| `machineId` | string | Must match nodes.json entry |
-| `displayName` | string | Human-readable name |
-| `listenHost` | string | Bind address (default: 0.0.0.0) |
-| `listenPort` | number | Agent port (default: 4010) |
-| `allowedServerIp` | string | Linux server IP for security |
-| `sharedToken` | string | Must match nodes.json token |
-| `processName` | string | Process name for tasklist (e.g. playback.exe) |
-| `processPath` | string | Full path to executable |
-| `workingDir` | string | Working directory for the process |
-| `heartbeatTarget` | string | Linux heartbeat endpoint URL |
-| `heartbeatIntervalMs` | number | Heartbeat send interval (default: 5000) |
-| `localCheckIntervalMs` | number | Local process check interval (default: 3000) |
-| `restartCooldownMs` | number | Min time between restarts (default: 30000) |
-
-## Testing
+## 測試
 
 ```bash
 cd linux-monitor
-npm install
-npm test
+npm test                              # 5 個單元整合測試
+python3 tests/live-system.test.py    # 12 項 live 驗收測試（需系統在線）
 ```
 
-5 integration tests covering:
-1. All 4 nodes healthy heartbeat -> all healthy
-2. Single node heartbeat timeout -> only that node degraded + restart
-3. Single node ping failure -> offline, no restart
-4. Single node appRunning=false -> degraded, restart only that node
-5. Restart throttle after exceeding limit
+## 目錄結構
 
-## Troubleshooting
-
-### 1. Agent not responding (agent_down)
-- Check if Node.js process is running on the Windows machine
-- Verify firewall allows port 4010 inbound
-- Check `config/agent.config.json` listenHost is `0.0.0.0`
-
-### 2. Heartbeat timeout but agent reachable (warning)
-- App heartbeat thread may have crashed
-- Check Windows agent logs for heartbeat send errors
-- Verify `heartbeatTarget` URL is correct in agent config
-
-### 3. Node shows offline
-- Check network connectivity between Linux server and Windows machine
-- Verify IP address in `config/nodes.json` is correct
-- Check Windows firewall rules for port 4010
-
-### 4. Restart not triggered (throttle)
-- System limits restarts to `maxRestartPer10Min` (default: 3) per 10-minute window
-- Check logs for "Restart throttled" messages
-- Wait for the window to expire or investigate root cause
-
-### 5. Process won't start after restart
-- Verify `processPath` in agent config points to valid executable
-- Check `workingDir` exists and is accessible
-- Review Windows agent logs for spawn errors
-- Ensure SYSTEM account has permissions to run the process
-
-## Acceptance Criteria
-
-- **AC-01** Multi-node identification: System correctly identifies all nodes by unique machineId
-- **AC-02** Independent state: heartbeat / ping / status / restart tracked independently per node
-- **AC-03** Single node timeout does not affect other nodes
-- **AC-04** Single node restart targets only that node
-- **AC-05** Offline nodes are not restarted
-- **AC-06** Throttle enforced: max 3 restarts per 10-minute sliding window
-- **AC-07** Linux systemd auto-start on boot
-- **AC-08** Windows Task Scheduler auto-start on boot (no login required)
-- **AC-09** Structured JSON logs for all events: heartbeat timeout, ping fail, restart request/success/reject
-- **AC-10** Complete documentation: install, config, test, troubleshooting
+```
+playback-watchdog/
+├── DEPLOY.md                          ← 部署手冊
+├── DEV-SPEC.md                        ← 技術規格
+├── linux-monitor/
+│   ├── src/
+│   │   ├── server.ts                  ← Fastify API 伺服器
+│   │   ├── state-manager.ts           ← 節點狀態機
+│   │   ├── logger.ts
+│   │   └── types.ts
+│   ├── config/nodes.json              ← 節點清單設定
+│   ├── tests/
+│   │   ├── integration.test.ts        ← Vitest 單元測試
+│   │   └── live-system.test.py        ← Live 驗收測試
+│   └── scripts/install-systemd.sh    ← systemd 安裝腳本
+└── windows-agent/
+    ├── src/
+    │   ├── agent.ts                   ← Fastify API + singleton guard
+    │   ├── heartbeat.ts               ← 心跳推送
+    │   ├── process-manager.ts         ← tasklist + spawn
+    │   └── types.ts
+    ├── config/agent.config.json       ← Agent 設定
+    └── scripts/
+        ├── install-task-scheduler.ps1 ← Task Scheduler 安裝
+        └── hardening/
+            ├── init_workstation.ps1   ← 主機硬化
+            ├── rollback_workstation.ps1
+            └── check_status.ps1      ← 硬化狀態檢查
+```
