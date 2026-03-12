@@ -59,20 +59,30 @@
 
 ## 🤖 Claude 自動部署（推薦）
 
-**場域端 Windows 主機可以直接用 Claude 完成所有部署步驟，無需逐行手動執行。**
+**場域端 Windows 主機可以直接用 AI 完成所有部署步驟，支援 Claude / Codex / Gemini。**
 
-### 使用方式
+### 使用方式（三選一）
 
-1. 在 Windows 主機上開啟瀏覽器，前往 [claude.ai](https://claude.ai)
-2. 開啟 **[CLAUDE-DEPLOY.md](./CLAUDE-DEPLOY.md)**，複製全文貼入 Claude 對話
-3. Claude 會自動詢問必要資訊（伺服器 IP、Token 等）並依序執行 10 個部署步驟
-4. 完成後 Claude 會輸出清單，確認每項是否成功
+#### 方法 A：貼上（適合任何 AI，零安裝）
+1. 開啟 [claude.ai](https://claude.ai) 或 [chatgpt.com](https://chatgpt.com) 或 [gemini.google.com](https://gemini.google.com)
+2. 開啟 **[AI-DEPLOY.md](./AI-DEPLOY.md)**，複製全文貼入對話框
+3. AI 自動詢問必要資訊並依序執行 10 個步驟
 
-**CLAUDE-DEPLOY.md 涵蓋：**
+#### 方法 B：CLI（適合已安裝 AI CLI 的環境）
+
+```powershell
+# Claude Code CLI
+Get-Content AI-DEPLOY.md | claude --print
+
+# OpenAI Codex CLI
+codex --approval-mode full-auto (Get-Content AI-DEPLOY.md -Raw)
+
+# Google Gemini CLI
+Get-Content AI-DEPLOY.md | gemini
+```
+
+**AI-DEPLOY.md 涵蓋：**
 - 環境確認 → Clone/Build → 設定寫入 → 防火牆 → Task Scheduler → 啟動驗證 → 主機硬化 → Live 測試
-
-> 若場域已安裝 Claude Code CLI，也可以：  
-> `cat CLAUDE-DEPLOY.md | claude --print`
 
 ---
 

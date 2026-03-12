@@ -8,7 +8,7 @@
 
 | 文件 | 內容 |
 |------|------|
-| **[CLAUDE-DEPLOY.md](./CLAUDE-DEPLOY.md)** | 🤖 **貼給 Claude 自動執行部署**（推薦場域使用） |
+| **[AI-DEPLOY.md](./AI-DEPLOY.md)** | 🤖 **AI 自動部署**（Claude / Codex / Gemini 通用） |
 | [DEPLOY.md](./DEPLOY.md) | 完整部署手冊（手動步驟 + 設定說明 + API） |
 | [DEV-SPEC.md](./DEV-SPEC.md) | 技術規格與架構設計 |
 
