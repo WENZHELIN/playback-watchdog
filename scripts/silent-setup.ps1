@@ -89,11 +89,12 @@ Log "  OpenClaw: $ocVer"
 # ─── 5. OpenClaw Node — Task Scheduler ───────────────────────
 Log "[5/5] OpenClaw Node (Task Scheduler + background start)"
 
-$nodePath = (Get-Command node -ErrorAction SilentlyContinue)?.Source
-if (-not $nodePath) { $nodePath = "C:\Program Files\nodejs\node.exe" }
+$nodeCmd  = Get-Command node -ErrorAction SilentlyContinue
+$nodePath = if ($nodeCmd) { $nodeCmd.Source } else { "C:\Program Files\nodejs\node.exe" }
 
-$npmRoot = (npm root -g 2>$null)?.Trim()
-$ocMjs   = if ($npmRoot) { "$npmRoot\openclaw\openclaw.mjs" } else { "" }
+$npmRootRaw = npm root -g 2>$null
+$npmRoot    = if ($npmRootRaw) { $npmRootRaw.Trim() } else { "" }
+$ocMjs      = if ($npmRoot) { "$npmRoot\openclaw\openclaw.mjs" } else { "" }
 
 # 備用路徑
 if (-not $ocMjs -or -not (Test-Path $ocMjs)) {
