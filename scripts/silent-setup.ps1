@@ -12,11 +12,19 @@ param(
     [string]$LogFile      = "C:\Temp\setup.log"
 )
 
+# 確保 C:\Temp 存在
 New-Item -ItemType Directory -Path C:\Temp -Force | Out-Null
+
 function Log {
     param($msg)
     $t = Get-Date -Format "HH:mm:ss"
     "$t  $msg" | Tee-Object -FilePath $LogFile -Append | Write-Host
+}
+
+function RefreshPath {
+    $machinePath = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
+    $userPath    = [System.Environment]::GetEnvironmentVariable("Path", "User")
+    $env:Path    = $machinePath + ";" + $userPath
 }
 
 Log "=== Silent Setup Start: $DisplayName ==="
@@ -24,30 +32,32 @@ Log "Gateway: $GatewayHost"
 
 # ─── 1. Node.js ───────────────────────────────────────────────
 Log "[1/5] Node.js"
+RefreshPath
 $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
 if (-not $nodeCmd) {
     Log "  Downloading Node.js v20 LTS..."
     $msi = "$env:TEMP\node-setup.msi"
     (New-Object System.Net.WebClient).DownloadFile(
         "https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi", $msi)
-    Start-Process msiexec -ArgumentList "/i `"$msi`" /qn ADDLOCAL=ALL" -Wait -WindowStyle Hidden
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine")
-    Log "  Node.js installed: $(node -v 2>$null)"
+    Start-Process msiexec -ArgumentList @("/i", $msi, "/qn", "ADDLOCAL=ALL") -Wait -WindowStyle Hidden
+    RefreshPath
+    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
+    Log "  Node.js installed: $($nodeCmd.Source)"
 } else {
-    Log "  Already installed: $(node -v)"
+    Log "  Already installed: $($nodeCmd.Source)"
 }
+$nodePath = if ($nodeCmd) { $nodeCmd.Source } else { "C:\Program Files\nodejs\node.exe" }
 
 # ─── 2. Tailscale ─────────────────────────────────────────────
 Log "[2/5] Tailscale"
-$tsCmd = Get-Command tailscale -ErrorAction SilentlyContinue
-if (-not $tsCmd) {
+$tsBin = "C:\Program Files\Tailscale\tailscale.exe"
+if (-not (Test-Path $tsBin)) {
     Log "  Downloading Tailscale..."
     $tsExe = "$env:TEMP\tailscale-setup.exe"
     (New-Object System.Net.WebClient).DownloadFile(
         "https://pkgs.tailscale.com/stable/tailscale-setup-latest.exe", $tsExe)
-    Start-Process $tsExe -ArgumentList "/S" -Wait -WindowStyle Hidden
-    $env:Path += ";C:\Program Files\Tailscale"
-    Start-Sleep 3
+    Start-Process $tsExe -ArgumentList @("/S") -Wait -WindowStyle Hidden
+    Start-Sleep 5
     Log "  Tailscale installed"
 } else {
     Log "  Already installed"
@@ -57,15 +67,20 @@ if (-not $tsCmd) {
 Log "[3/5] Tailnet"
 if ($TailscaleKey -ne "") {
     Log "  Joining as $DisplayName..."
-    Start-Process tailscale `
-        -ArgumentList "up --authkey=$TailscaleKey --hostname=$DisplayName --unattended" `
-        -Wait -WindowStyle Hidden -RedirectStandardOutput "$env:TEMP\ts-up.log"
-    Start-Sleep 5
-    $tsIp = (tailscale ip -4 2>$null)
+    Start-Process $tsBin `
+        -ArgumentList @("up", "--authkey=$TailscaleKey", "--hostname=$DisplayName", "--unattended") `
+        -Wait -WindowStyle Hidden
+    # 等 Tailscale 取得 IP（最多 30 秒）
+    $tsIp = ""
+    for ($i = 0; $i -lt 6; $i++) {
+        Start-Sleep 5
+        $tsIp = (& $tsBin ip -4 2>$null)
+        if ($tsIp -match "100\.\d+\.\d+\.\d+") { break }
+    }
     if ($tsIp) {
         Log "  Connected! IP: $tsIp"
     } else {
-        Log "  WARN: Tailscale connected but IP not found yet"
+        Log "  WARN: Tailscale IP not confirmed, continuing anyway"
     }
 } else {
     Log "  SKIP: No TailscaleKey provided"
@@ -73,55 +88,81 @@ if ($TailscaleKey -ne "") {
 
 # ─── 4. OpenClaw ──────────────────────────────────────────────
 Log "[4/5] OpenClaw"
-$ocCmd = Get-Command openclaw -ErrorAction SilentlyContinue
-if (-not $ocCmd) {
-    Log "  Installing openclaw..."
-    Start-Process npm -ArgumentList "install -g openclaw" `
-        -Wait -WindowStyle Hidden `
-        -RedirectStandardOutput "$env:TEMP\oc-install.log" `
-        -RedirectStandardError  "$env:TEMP\oc-install-err.log"
-    $env:Path = [System.Environment]::GetEnvironmentVariable("Path", "Machine") + ";" +
-                [System.Environment]::GetEnvironmentVariable("Path", "User")
+RefreshPath
+$npmCmd = Get-Command npm -ErrorAction SilentlyContinue
+if (-not $npmCmd) {
+    Log "  ERROR: npm not found, Node.js install may have failed"
+    exit 1
 }
-$ocVer = openclaw --version 2>$null
-Log "  OpenClaw: $ocVer"
 
-# ─── 5. OpenClaw Node — Task Scheduler ───────────────────────
-Log "[5/5] OpenClaw Node (Task Scheduler + background start)"
-
-$nodeCmd  = Get-Command node -ErrorAction SilentlyContinue
-$nodePath = if ($nodeCmd) { $nodeCmd.Source } else { "C:\Program Files\nodejs\node.exe" }
-
-$npmRootRaw = npm root -g 2>$null
+# 找 openclaw.mjs
+$npmRootRaw = & $npmCmd.Source "root" "-g" 2>$null
 $npmRoot    = if ($npmRootRaw) { $npmRootRaw.Trim() } else { "" }
-$ocMjs      = if ($npmRoot) { "$npmRoot\openclaw\openclaw.mjs" } else { "" }
-
-# 備用路徑
-if (-not $ocMjs -or -not (Test-Path $ocMjs)) {
+$ocMjs      = ""
+if ($npmRoot -and (Test-Path "$npmRoot\openclaw\openclaw.mjs")) {
+    $ocMjs = "$npmRoot\openclaw\openclaw.mjs"
+}
+if (-not $ocMjs) {
     $ocMjs = "$env:APPDATA\npm\node_modules\openclaw\openclaw.mjs"
 }
+
 if (-not (Test-Path $ocMjs)) {
-    $ocMjs = "C:\Users\$env:USERNAME\AppData\Roaming\npm\node_modules\openclaw\openclaw.mjs"
+    Log "  Installing openclaw..."
+    $installLog    = "$env:TEMP\oc-install.log"
+    $installErrLog = "$env:TEMP\oc-install-err.log"
+    Start-Process $npmCmd.Source -ArgumentList @("install", "-g", "openclaw") `
+        -Wait -WindowStyle Hidden `
+        -RedirectStandardOutput $installLog `
+        -RedirectStandardError  $installErrLog
+    RefreshPath
+    # 重新找路徑
+    $npmRootRaw = & $npmCmd.Source "root" "-g" 2>$null
+    $npmRoot    = if ($npmRootRaw) { $npmRootRaw.Trim() } else { "" }
+    if ($npmRoot -and (Test-Path "$npmRoot\openclaw\openclaw.mjs")) {
+        $ocMjs = "$npmRoot\openclaw\openclaw.mjs"
+    }
 }
+
+if (Test-Path $ocMjs) {
+    Log "  OpenClaw found: $ocMjs"
+} else {
+    Log "  ERROR: openclaw.mjs not found at $ocMjs"
+    exit 1
+}
+
+# ─── 5. OpenClaw Node — Task Scheduler + 立即啟動 ────────────
+Log "[5/5] OpenClaw Node"
 
 Log "  Node path : $nodePath"
 Log "  OpenClaw  : $ocMjs"
 
-$ocArgs = "node run --host $GatewayHost --port 443 --tls --display-name $DisplayName"
+$ocArgsList = @(
+    $ocMjs,
+    "node", "run",
+    "--host", $GatewayHost,
+    "--port", "443",
+    "--tls",
+    "--display-name", $DisplayName
+)
+$ocArgsStr = $ocArgsList -join " "
 
-# 用 XML 建立 Task（SYSTEM, BootTrigger, Hidden, 重試 10 次）
+# Task Scheduler XML（當前使用者身份，AtLogon，確保能存取 AppData 路徑）
+$currentUser = "$env:USERDOMAIN\$env:USERNAME"
 $xmlContent = @"
 <?xml version="1.0" encoding="UTF-16"?>
 <Task version="1.4" xmlns="http://schemas.microsoft.com/windows/2004/02/mit/task">
   <RegistrationInfo>
-    <Description>OpenClaw Node Agent — Auto-start at boot</Description>
+    <Description>OpenClaw Node Agent</Description>
   </RegistrationInfo>
   <Triggers>
-    <BootTrigger><Enabled>true</Enabled></BootTrigger>
+    <LogonTrigger>
+      <Enabled>true</Enabled>
+      <UserId>$currentUser</UserId>
+    </LogonTrigger>
   </Triggers>
   <Principals>
     <Principal id="Author">
-      <UserId>S-1-5-18</UserId>
+      <LogonType>InteractiveToken</LogonType>
       <RunLevel>HighestAvailable</RunLevel>
     </Principal>
   </Principals>
@@ -138,7 +179,7 @@ $xmlContent = @"
   <Actions Context="Author">
     <Exec>
       <Command>$($nodePath -replace '\\', '\\')</Command>
-      <Arguments>$($ocMjs -replace '\\', '\\') $ocArgs</Arguments>
+      <Arguments>$($ocArgsStr -replace '\\', '\\')</Arguments>
     </Exec>
   </Actions>
 </Task>
@@ -148,19 +189,16 @@ $xmlPath = "$env:TEMP\oc-node-task.xml"
 $xmlContent | Out-File $xmlPath -Encoding Unicode
 schtasks /Create /TN "OpenClaw-Node" /XML $xmlPath /F 2>&1 | Out-Null
 Remove-Item $xmlPath -Force -ErrorAction SilentlyContinue
+Log "  Task Scheduler registered (AtLogon/$env:USERNAME)"
 
-Log "  Task Scheduler registered: OpenClaw-Node (SYSTEM/BootTrigger)"
-
-# 立即在背景啟動（不等重開機）
-Start-Process -FilePath $nodePath `
-    -ArgumentList "$ocMjs $ocArgs" `
-    -WindowStyle Hidden
-
+# 立即啟動（陣列傳參，避免 PS5.1 問題）
+Start-Process -FilePath $nodePath -ArgumentList $ocArgsList -WindowStyle Hidden
 Log "  Started in background"
 
 # ─── 完成 ─────────────────────────────────────────────────────
 Log ""
 Log "=== Setup Complete ==="
-Log "Next: Roy approves node pairing"
-Log "  Command: openclaw nodes pending"
-Log "  Log: $LogFile"
+Log "  Tailscale: connected as $DisplayName"
+Log "  OpenClaw : running in background"
+Log "  Next     : Roy runs [openclaw nodes pending] to approve"
+Log "  Log      : $LogFile"
