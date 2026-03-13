@@ -107,20 +107,26 @@ if (-not $ocMjs) {
 }
 
 if (-not (Test-Path $ocMjs)) {
-    Log "  Installing openclaw..."
-    $installLog    = "$env:TEMP\oc-install.log"
-    $installErrLog = "$env:TEMP\oc-install-err.log"
-    # npm 是 .cmd 檔，必須用 cmd /c 執行
-    Start-Process "cmd.exe" -ArgumentList @("/c", "npm install -g openclaw") `
-        -Wait -WindowStyle Hidden `
-        -RedirectStandardOutput $installLog `
-        -RedirectStandardError  $installErrLog
+    Log "  Installing openclaw (this may take 1-2 minutes)..."
+    # 直接在當前 session 執行，錯誤寫入 log
+    cmd /c "npm install -g openclaw" 2>&1 | Out-File "$env:TEMP\oc-install.log" -Encoding UTF8
+    Log "  npm install done, finding path..."
     RefreshPath
     # 重新找路徑
     $npmRootRaw = cmd /c "npm root -g" 2>$null
-    $npmRoot    = if ($npmRootRaw) { $npmRootRaw.Trim() } else { "" }
+    $npmRoot    = if ($npmRootRaw) { ($npmRootRaw | Select-Object -Last 1).Trim() } else { "" }
+    Log "  npm root -g: $npmRoot"
     if ($npmRoot -and (Test-Path "$npmRoot\openclaw\openclaw.mjs")) {
         $ocMjs = "$npmRoot\openclaw\openclaw.mjs"
+    }
+    # 若還是找不到，列出 npm 全局路徑輔助診斷
+    if (-not (Test-Path $ocMjs)) {
+        $altRoot = cmd /c "npm config get prefix" 2>$null
+        $altRoot = if ($altRoot) { ($altRoot | Select-Object -Last 1).Trim() } else { "" }
+        Log "  npm prefix: $altRoot"
+        if ($altRoot -and (Test-Path "$altRoot\node_modules\openclaw\openclaw.mjs")) {
+            $ocMjs = "$altRoot\node_modules\openclaw\openclaw.mjs"
+        }
     }
 }
 
