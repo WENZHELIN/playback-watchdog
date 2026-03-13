@@ -95,8 +95,8 @@ if (-not $npmCmd) {
     exit 1
 }
 
-# 找 openclaw.mjs
-$npmRootRaw = & $npmCmd.Source "root" "-g" 2>$null
+# 找 openclaw.mjs（npm 是 .cmd，用 cmd /c 呼叫）
+$npmRootRaw = cmd /c "npm root -g" 2>$null
 $npmRoot    = if ($npmRootRaw) { $npmRootRaw.Trim() } else { "" }
 $ocMjs      = ""
 if ($npmRoot -and (Test-Path "$npmRoot\openclaw\openclaw.mjs")) {
@@ -110,13 +110,14 @@ if (-not (Test-Path $ocMjs)) {
     Log "  Installing openclaw..."
     $installLog    = "$env:TEMP\oc-install.log"
     $installErrLog = "$env:TEMP\oc-install-err.log"
-    Start-Process $npmCmd.Source -ArgumentList @("install", "-g", "openclaw") `
+    # npm 是 .cmd 檔，必須用 cmd /c 執行
+    Start-Process "cmd.exe" -ArgumentList @("/c", "npm install -g openclaw") `
         -Wait -WindowStyle Hidden `
         -RedirectStandardOutput $installLog `
         -RedirectStandardError  $installErrLog
     RefreshPath
     # 重新找路徑
-    $npmRootRaw = & $npmCmd.Source "root" "-g" 2>$null
+    $npmRootRaw = cmd /c "npm root -g" 2>$null
     $npmRoot    = if ($npmRootRaw) { $npmRootRaw.Trim() } else { "" }
     if ($npmRoot -and (Test-Path "$npmRoot\openclaw\openclaw.mjs")) {
         $ocMjs = "$npmRoot\openclaw\openclaw.mjs"
