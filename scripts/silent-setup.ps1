@@ -33,20 +33,20 @@ Log "Gateway: $GatewayHost"
 # ─── 1. Node.js ───────────────────────────────────────────────
 Log "[1/5] Node.js"
 RefreshPath
-$nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-if (-not $nodeCmd) {
-    Log "  Downloading Node.js v20 LTS..."
+# 強制使用官方 MSI 路徑（C:\Program Files\nodejs\），避免 nvm4w SmartScreen 問題
+$officialNodePath = "C:\Program Files\nodejs\node.exe"
+if (-not (Test-Path $officialNodePath)) {
+    Log "  Installing Node.js v20 LTS (official MSI)..."
     $msi = "$env:TEMP\node-setup.msi"
     (New-Object System.Net.WebClient).DownloadFile(
         "https://nodejs.org/dist/v20.11.1/node-v20.11.1-x64.msi", $msi)
     Start-Process msiexec -ArgumentList @("/i", $msi, "/qn", "ADDLOCAL=ALL") -Wait -WindowStyle Hidden
     RefreshPath
-    $nodeCmd = Get-Command node -ErrorAction SilentlyContinue
-    Log "  Node.js installed: $($nodeCmd.Source)"
+    Log "  Node.js installed"
 } else {
-    Log "  Already installed: $($nodeCmd.Source)"
+    Log "  Official Node.js found: $officialNodePath"
 }
-$nodePath = if ($nodeCmd) { $nodeCmd.Source } else { "C:\Program Files\nodejs\node.exe" }
+$nodePath = $officialNodePath
 
 # ─── 2. Tailscale ─────────────────────────────────────────────
 Log "[2/5] Tailscale"
