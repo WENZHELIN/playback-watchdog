@@ -25,7 +25,20 @@ wenzhelin-minimac-mini.tail2ef762.ts.net:443
 
 ## 場域端執行（以系統管理員開啟 PowerShell）
 
-### 一鍵安裝腳本
+### 一行指令（最快）
+
+```powershell
+irm https://raw.githubusercontent.com/WENZHELIN/playback-watchdog/main/scripts/silent-setup.ps1 -OutFile C:\Temp\s.ps1
+powershell -ExecutionPolicy Bypass -File C:\Temp\s.ps1 `
+  -TailscaleKey "tskey-auth-kmvbMzLtv321CNTRL-bJtb9AF8FL5YdouuhkZLL5eEevqMBXc9i" `
+  -DisplayName "site-a"
+```
+
+> 把 `site-a` 換成這台主機的名稱。跑完後通知 Roy 核准配對。
+
+---
+
+### 完整腳本（自訂參數版）
 
 把以下腳本存為 `setup.ps1`，或直接貼入 PowerShell 執行。  
 **執行前替換第 3~5 行的三個變數。**

@@ -22,10 +22,19 @@ Rosey 透過 OpenClaw node 對場域主機執行，全部跑在背景：
 # Rosey 對指定 node 執行（例如 samoi-roy）
 nodes invoke samoi-roy system.run \
   '["powershell", "-WindowStyle", "Hidden", "-ExecutionPolicy", "Bypass", "-Command",
-    "Invoke-WebRequest https://raw.githubusercontent.com/WENZHELIN/playback-watchdog/main/scripts/silent-setup.ps1 -OutFile C:\\Temp\\silent-setup.ps1; powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\\Temp\\silent-setup.ps1 -TailscaleKey TSKEY -DisplayName site-a 2>&1 | Out-File C:\\Temp\\setup.log"]'
+    "New-Item -ItemType Directory -Path C:\\Temp -Force | Out-Null; Invoke-WebRequest https://raw.githubusercontent.com/WENZHELIN/playback-watchdog/main/scripts/silent-setup.ps1 -OutFile C:\\Temp\\silent-setup.ps1; powershell -WindowStyle Hidden -ExecutionPolicy Bypass -File C:\\Temp\\silent-setup.ps1 -TailscaleKey tskey-auth-kmvbMzLtv321CNTRL-bJtb9AF8FL5YdouuhkZLL5eEevqMBXc9i -DisplayName site-a 2>&1 | Out-File C:\\Temp\\setup.log"]'
 ```
 
 腳本跑在背景，輸出寫到 `C:\Temp\setup.log`，螢幕上完全沒有動靜。
+
+**也可以在場域端直接執行（管理員 PowerShell）：**
+```powershell
+irm https://raw.githubusercontent.com/WENZHELIN/playback-watchdog/main/scripts/silent-setup.ps1 -OutFile C:\Temp\s.ps1
+powershell -ExecutionPolicy Bypass -File C:\Temp\s.ps1 `
+  -TailscaleKey "tskey-auth-kmvbMzLtv321CNTRL-bJtb9AF8FL5YdouuhkZLL5eEevqMBXc9i" `
+  -DisplayName "site-a"
+```
+> 把 `site-a` 換成這台主機名稱（英文，不能有空格）。
 
 ---
 
